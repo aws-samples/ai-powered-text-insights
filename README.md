@@ -228,7 +228,7 @@ copilot svc logs --follow
 
 ## Visualize your insights with Amazon QuickSight
 
-To create some example visualizations from the processed text data follow the instructions on the **Creating visualizations with QuickSight.pdf** file.
+To create some example visualizations from the processed text data follow the instructions on the [Creating visualizations with QuickSight.pdf](Creating visualizations with QuickSight.pdf) file.
 
 ## Rules examples for filtered stream
 
