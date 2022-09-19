@@ -1,0 +1,28 @@
+Parameters:
+  App:
+    Type: String
+    Description: Your application's name.
+  Env:
+    Type: String
+    Description: The environment name your service, job, or workflow is being deployed to.
+  Name:
+    Type: String
+    Description: The name of the service, job, or workflow being deployed.
+
+Resources:
+  QueuePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: SqsActions
+            Effect: Allow
+            Action:
+              - sqs:SendMessage
+            Resource: arn:aws:sqs:us-east-1:063506485750:social-media-insights-dashboard-TweetsQueue-1YDukw6k5WlE
+
+Outputs:
+  QueuePolicyArn:
+    Description: The ARN of the ManagedPolicy to attach to the task role.
+    Value: !Ref QueuePolicy
