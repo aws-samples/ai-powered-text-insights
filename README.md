@@ -96,13 +96,19 @@ in [Recovery and redundancy features](https://developer.twitter.com/en/docs/twit
 Even though there will be only one container running at a time, having two AZs is still recommended, because in case
 one AZ is down, ECS can run the application in the other AZ.
 
-### 3. Create service
+### 3. Deploy the environment
+
+```
+copilot env deploy --name test
+```
+
+### 4. Create service
 
 ```
 copilot svc init --name stream-getter --svc-type "Backend Service" --dockerfile ./Dockerfile
 ```
 
-### 4. Create secret to store the Twitter Bearer token
+### 5. Create secret to store the Twitter Bearer token
 
 ```
 copilot secret init --name TwitterBearerToken
@@ -110,7 +116,7 @@ copilot secret init --name TwitterBearerToken
 
 When prompted to provide the secret, paste the Twitter Bearer token.
 
-### 5. Edit service manifest
+### 6. Edit service manifest
 
 Open the file `copilot/stream-getter/manifest.yml` and change its content to the following:
 
@@ -149,7 +155,7 @@ aws cloudformation describe-stacks --stack-name <BACKEND_STACK_NAME> \
 ```
 
 
-### 6. Add permission to write to the queue
+### 7. Add permission to write to the queue
 
 Create a new file in `copilot/stream-getter/addons/` called `sqs-policy.yaml` with the following content:
 
@@ -202,17 +208,20 @@ After that, your directory should look like the following:
 ├── Dockerfile
 ├── backoff.py
 ├── copilot
-│     └── stream-getter
-│         ├── addons
-│         │     └── sqs-policy.yaml
-│         └── manifest.yml
+│     ├── stream-getter
+│     │    ├── addons
+│     │    │     └── sqs-policy.yaml
+│     │    └── manifest.yml
+│     └── environments
+│          └── test
+│               └── manifest.yml
 ├── main.py
 ├── requirements.txt
 ├── sqs_helper.py
 └── stream_match.py
 ```
 
-### 7. Deploy service
+### 8. Deploy service
 
 > **IMPORTANT:** The container will connect to the Twitter stream as soon as it starts, after deploying the service. You need your Twitter stream rules configured before connecting to the stream. Therefore, if you haven't configured the rules yet, configure them before proceeding.
 
@@ -228,7 +237,7 @@ copilot svc logs --follow
 
 ## Visualize your insights with Amazon QuickSight
 
-To create some example visualizations from the processed text data follow the instructions on the [Creating visualizations with QuickSight.pdf](Creating visualizations with QuickSight.pdf) file.
+To create some example visualizations from the processed text data follow the instructions on the [Creating visualizations with QuickSight.pdf](Creating_visualizations_with_QuickSight.pdf) file.
 
 ## Rules examples for filtered stream
 
