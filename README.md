@@ -34,7 +34,7 @@ Run the command below, from within the `backend/` directory, to deploy the backe
 sam build --use-container && sam deploy --guided
 ```
 
-Follow the prompts.
+Follow the prompts. NOTE: Due to a constraint in Lookout for Metrics naming of databases please name you stack using the following regular expression pattern: [a-zA-Z0-9_]+
 
 The command above deploys an AWS CloudFormation stack in your AWS account. You will need the stack's output values to deploy
 the Twitter stream getter container.
