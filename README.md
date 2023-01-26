@@ -270,11 +270,12 @@ curl -X POST 'https://api.twitter.com/2/tweets/search/stream/rules' \
 
 If you don't want to continue using the sample, clean up its resources to avoid further charges.
 
-Start by deleting the backend AWS CloudFormation stack which, in turn, will remove the underlying resources created.
-
-And, to delete all the resources AWS Copilot set up for the container application, run the following command:
+Start by deleting the backend AWS CloudFormation stack which, in turn, will remove the underlying resources created then delete all the resources AWS Copilot set up for the container application, run the following commands:
 
 ```
+sam delete --stack-name <sam stack name>
+copilot svc delete --name stream-getter
+copilot env delete --name test
 copilot app delete
 ```
 
