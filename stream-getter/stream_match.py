@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT-0
 
 import json
-
+import datetime
 
 class StreamMatch:
 
@@ -15,8 +15,8 @@ class StreamMatch:
         output_object = {
             'text': input_object['data']['text'],
             'user': user['username'],
-            'created_at': input_object['data']['created_at'],
-            'source': input_object['data']['source'],
+            'created_at': input_object['data']['created_at'] if 'created_at' in input_object['data'] else datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+            'source': input_object['data']['source'] if 'source' in input_object['data'] else 'Undefined',
             'platform': 'Twitter'
         }
         return json.dumps(output_object, ensure_ascii=False)
