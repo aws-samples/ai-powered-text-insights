@@ -1,15 +1,80 @@
 # AI Powered Text Insights
 
-This package includes a sample of a prototype to help you gain insights on how your customers interact with your brand in social media. By combining zero-shot text classification, sentiment analysis, and keyword extraction we are able to obtain real time insights from posts on Twitter and present them in a dashboard. The solution consists of a tweet processing pipeline (using AWS Lambda) that classifies tweets, by calling a serverless SageMaker endpoint running a HuggingFace model, into one of the categories defined at inference time (zero-shot classification). Classified tweets are then processed with Amazon Comprehend to extract sentiment and keywords. Anomaly detection is performed on the volume of tweets per category per period of time using Amazon Lookout for Metrics and notifications are sent when anomalies are detected. All insights are presented on a QuickSight dashboard.
+This package includes the code of a prototype to help you gain insights on how your customers interact with you or your brand on social media. By leveraging Large Language Models (LLMs) on Amazon Bedrock we are able to extract real time insights (like topic, entities, sentiment, and more) from short text of any kind of short text (including posts on social media). We then use these insights to create rich visualizations on Amazon Quicksight and configure automated alerts using Amazon Lookout for Metrics. The solution consists of a text processing pipeline (using AWS Lambda) that extracts the following insights from posts on social media:
 
-The sample application includes some backend resources (`backend` directory) and a container that gets tweets from a
-Twitter stream (`stream-getter` directory).
+- Topic of the post
+- Sentiment of the post
+- Entities involved in the post
+- Location of the post (if present)
+- Links in the post (if present)
+- Keyphrases in the post
+
+This extraction is made by leveraging an LLM (Claude 3 Haiku) to extract such information and store it in a JSON object as described bellow 
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "topic": {
+    "description": "the main topic of the post",
+    "type": "string",
+    "default": ""
+    },
+    "location": {
+    "description": "the location, if exists, where the events occur",
+    "type": "string",
+    "default": ""
+    },
+    "entities": {
+    "description": "the entities involved in the post",
+    "type": "list",
+    "default": []
+    },
+    "keyphrases": {
+    "description": "the keyphrases in the post",
+    "type": "list",
+    "default": []
+    },
+    "sentiment": {
+    "description": "the sentiment of the post",
+    "type": "string",
+    "default": ""
+    },
+    "links": {
+    "description": "any links found withing the post",
+    "type": "list",
+    "default": []
+    }
+  }
+}
+
+```
+
+If a processed text contains a location the coordinates of such location are obtained using Amazon Location Services. Processed posts are stored in an Amazon S3 bucket. Data stored in S3 is queried using Amazon Athena. Anomaly detection is performed on the volume of posts per category per period of time using Amazon Lookout for Metrics and notifications are sent when anomalies are detected. All insights can be presented in a QuickSight dashboard.
+
+The application includes the following resources (directories): 
+
+- `backend`: Contains all the code for the application and the deployment of the resources described in the Architecture diagram
+- `data-streamer`: A sample application that streams sample X.com posts about New Year's resolutions to the AI Powered Text insights application
+- `stream-getter`: A sample application to receive posts from a real X.com account to the AI Powered Text insights application
+- `sample-files`: Example JSON objects of processed posts.
+
 
 ## Deploy instructions
 
 Deploying the sample application builds the following environment in the AWS Cloud:
 
 ![architecture](architecture.png)
+
+1. An [Amazon Elastic Container Service](https://aws.amazon.com/ecs/) (Amazon ECS) task runs on serverless infrastructure managed by [AWS Fargate](https://aws.amazon.com/fargate/) and maintains an open connection to the social media.
+2. The social media access tokens are securely stored in [AWS Systems Manager Parameter Store](https://aws.amazon.com/systems-manager/), and the container image is hosted on [Amazon Elastic Container Registry](https://aws.amazon.com/ecr/) (Amazon ECR).
+3. When a new post arrives, it’s placed into an [Amazon Simple Queue Service](https://aws.amazon.com/sqs/) (SQS) queue.
+4. The logic of the solution resides in [AWS Lambda](https://aws.amazon.com/lambda/) function microservices, coordinated by [AWS Step Functions](https://aws.amazon.com/step-functions/).
+5. The post is processed in real time by one of the Large Language Models (LLM) supported by [Amazon Bedrock](https://aws.amazon.com/bedrock).
+6. [Amazon Location Service](https://aws.amazon.com/location/) transforms a location name into coordinates. 
+7. The post and metadata (insights) are sent to [Amazon Simple Storage Service](https://aws.amazon.com/s3/) (Amazon S3), and [Amazon Athena](https://aws.amazon.com/athena/) queries the processed tweets with standard SQL.
+8. [Amazon Lookout for Metrics](https://aws.amazon.com/lookout-for-metrics/) looks for anomalies in the volume of mentions per category. [Amazon Simple Notification Service](https://aws.amazon.com/sns/) (Amazon SNS) sends an alert to users when an anomaly is detected.
+9. We recommend setting up a [Amazon QuickSight](https://aws.amazon.com/quicksight/) Dashboard so that business users can easily visualize insights.
 
 ## Prerequisites
 
@@ -20,11 +85,13 @@ Deploying the sample application builds the following environment in the AWS Clo
   to [Installing the AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
 * AWS Copilot CLI. Refer to
   [Install Copilot](https://aws.github.io/copilot-cli/docs/getting-started/install/)
-* Twitter application Bearer token. Refer
-  to [OAuth 2.0 Bearer Token - Prerequisites](https://developer.twitter.com/en/docs/authentication/oauth-2-0/bearer-tokens)
-* Twitter Filtered stream rules configured. Refer to the examples in the end of this document and to
-  [Building rules for filtered stream](https://developer.twitter.com/en/docs/twitter-api/tweets/filtered-stream/integrate/build-a-rule)
 * Docker. Refer to [Docker](https://www.docker.com/products/docker-desktop)
+* Get access to Claude 3 Haiku model on Amazon Bedrock. Follow the instructions in the [model access guide](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html).
+* Authenticate to Amazon ECR public registry. Follow this [guide to authenticate](https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html)
+* [Optional] Twitter application Bearer token. Refer
+  to [OAuth 2.0 Bearer Token - Prerequisites](https://developer.twitter.com/en/docs/authentication/oauth-2-0/bearer-tokens)
+* [Optional] Twitter Filtered stream rules configured. Refer to the examples in the end of this document and to
+  [Building rules for filtered stream](https://developer.twitter.com/en/docs/twitter-api/tweets/filtered-stream/integrate/build-a-rule)
 
 ## Backend resources
 
@@ -41,7 +108,7 @@ the Twitter stream getter container.
 
 ### 1. Data format
 
-This solution generates the tweets insights, stored as JSON files, into two S3 locations, **/tweets** and **/phrases**, on the results bucket whose name is specified by the CloudFormation stack's outputs under "TweetsBucketName". Under **/tweets** and **/phrases** folders data is organized by day following the **YYYY-MM-dd 00:00:00** datetime format.
+This solution generates the posts insights, stored as JSON files, into four S3 locations, **/posts**, **/links**, **/topics**, and **/phrases**, on the results bucket whose name is specified by the CloudFormation stack's outputs under "PostsBucketName". Under each subfolder data is organized by day following the **YYYY-MM-dd 00:00:00** datetime format.
 
 Sample output files can be found in this repository under the **/sample_files** folder. 
 
@@ -49,13 +116,27 @@ Sample output files can be found in this repository under the **/sample_files** 
 
 To allow for you to provide historical data to the anomaly detector to [reduce the detector’s learning time](https://docs.aws.amazon.com/lookoutmetrics/latest/dev/services-athena.html) the prototype is deployed with the anomaly detector disabled.
 
-If you have historical data with the same format as the data generated by this solution you may move it to the data S3 bucket generated by deploying the backend (TweetsBucketName). Make sure to follow the format of the files in the **/sample_files** folder.
+If you have historical data with the same format as the data generated by this solution you may move it to the data S3 bucket generated by deploying the backend (PostsBucketName). Make sure to follow the format of the files in the **/sample_files** folder.
 
 [Follow the instructions](https://docs.aws.amazon.com/lookoutmetrics/latest/dev/gettingstarted-detector.html) to activate your detector, the detector’s name can be found as part of the CloudFormation stack’s outputs.
 
-Optionally you can configure alerts for your anomaly detector. [Follow the instructios](https://docs.aws.amazon.com/lookoutmetrics/latest/dev/gettingstarted-detector.html) to create an alert that sends a notification to SNS, the SNS topic name are part of the CloudFormation stack’s outputs.
+Optionally you can configure alerts for your anomaly detector. [Follow the instructions](https://docs.aws.amazon.com/lookoutmetrics/latest/dev/gettingstarted-detector.html) to create an alert that sends a notification to SNS, the SNS topic name are part of the CloudFormation stack’s outputs.
 
-## Twitter stream getter container
+## [Optional] Test the application by streaming sample X.com posts
+
+This section is entirely optional. It will show you how to stream sample X.com posts to the Amazon SQS queue (2 in the architecture diagram) locally from your computer.
+
+Navigate to ``data-streamer`` folder and run: 
+
+```
+python stream_posts.py \
+--queue_url <SQS_QUEUE_URL> \
+--region <DEPLOYMENT_REGION>
+```
+
+## [Optional] Stream real X.com posts to the application
+
+This section is entirely optional. It will show you how to deploy the assets under **stream-getter** folder which creates an application (1 in the architecture diagram) to get X.com posts using the [streaming API](https://developer.twitter.com/en/docs/tutorials/stream-tweets-in-real-time).
 
 Run the command below, from within the `stream-getter/` directory, to deploy the container application:
 
@@ -154,7 +235,6 @@ aws cloudformation describe-stacks --stack-name <BACKEND_STACK_NAME> \
     --query "Stacks[].Outputs[?OutputKey=='TweetsQueueUrl'][] | [0].OutputValue"
 ```
 
-
 ### 7. Add permission to write to the queue
 
 Create a new file in `copilot/stream-getter/addons/` called `sqs-policy.yaml` with the following content:
@@ -235,11 +315,7 @@ When the deployment finishes, you should have the container running inside ECS. 
 copilot svc logs --follow
 ```
 
-## Visualize your insights with Amazon QuickSight
-
-To create some example visualizations from the processed text data follow the instructions on the [Creating visualizations with QuickSight.pdf](Creating_visualizations_with_QuickSight.pdf) file.
-
-## Rules examples for filtered stream
+### 9. Rules examples for filtered stream
 
 Twitter provides endpoints that enable you to create and manage rules, and apply those rules to filter a stream of
 real-time tweets that will return matching public tweets.
@@ -266,6 +342,12 @@ curl -X POST 'https://api.twitter.com/2/tweets/search/stream/rules' \
 }'
 ```
 
+## Visualize your insights with Amazon QuickSight
+
+To create some example visualizations from the processed text data follow the instructions on the [Creating visualizations with QuickSight.pdf](Creating_visualizations_with_QuickSight.pdf) file.
+
+
+
 ## Clean up
 
 If you don't want to continue using the sample, clean up its resources to avoid further charges.
@@ -274,6 +356,11 @@ Start by deleting the backend AWS CloudFormation stack which, in turn, will remo
 
 ```
 sam delete --stack-name <sam stack name>
+```
+
+Additionally, if you deployed the X.com streaming application delete the deployed resources with:
+
+```
 copilot svc delete --name stream-getter
 copilot env delete --name test
 copilot app delete
