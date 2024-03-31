@@ -1,119 +1,97 @@
 {
-  "Comment": "A description of my state machine",
-  "StartAt": "Classify Post",
-  "States": {
-    "Classify Post": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "OutputPath": "$.Payload",
-      "Parameters": {
-        "Payload.$": "$",
-        "FunctionName": "${ClassifyPostFunctionArn}"
-      },
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException"
-          ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 6,
-          "BackoffRate": 2
+    "Comment": "A description of my state machine",
+    "StartAt": "Extract Insights",
+    "States": {
+        "Extract Insights": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "OutputPath": "$.Payload",
+            "Parameters": {
+                "Payload.$": "$",
+                "FunctionName": "${ExtractInisghtsFunctionArn}"
+            },
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 6,
+                    "BackoffRate": 2
+                }
+            ],
+            "Next": "ProcessPost?"
+        },
+        "ProcessPost?": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.process_post",
+                    "BooleanEquals": true,
+                    "Next": "LocatePost?"
+                }
+            ],
+            "Default": "Success"
+        },
+        "Success": {
+            "Type": "Succeed"
+        },
+        "LocatePost?": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.process_location",
+                    "BooleanEquals": true,
+                    "Next": "Locate Post"
+                }
+            ],
+            "Default": "Save Post"
+        },
+        "Locate Post": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "OutputPath": "$.Payload",
+            "Parameters": {
+                "Payload.$": "$",
+                "FunctionName": "${AddLocationFunctionArn}"
+            },
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 6,
+                    "BackoffRate": 2
+                }
+            ],
+            "Next": "Save Post"
+        },
+        "Save Post": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "OutputPath": "$.Payload",
+            "Parameters": {
+                "Payload.$": "$",
+                "FunctionName": "${SavePostFunctionArn}"
+            },
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 6,
+                    "BackoffRate": 2
+                }
+            ],
+            "End": true
         }
-      ],
-      "Next": "ProcessPost?"
-    },
-    "ProcessPost?": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.process_post",
-          "BooleanEquals": true,
-          "Next": "Comprehend Post"
-        }
-      ],
-      "Default": "Success"
-    },
-    "Success": {
-      "Type": "Succeed"
-    },
-    "Comprehend Post": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "OutputPath": "$.Payload",
-      "Parameters": {
-        "Payload.$": "$",
-        "FunctionName": "${ComprehendInsightsFunctionArn}"
-      },
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException"
-          ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 6,
-          "BackoffRate": 2
-        }
-      ],
-      "Next": "LocatePost?"
-    },
-    "LocatePost?": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.process_location",
-          "BooleanEquals": true,
-          "Next": "Locate Post"
-        }
-      ],
-      "Default": "Save Post"
-    },
-    "Locate Post": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "OutputPath": "$.Payload",
-      "Parameters": {
-        "Payload.$": "$",
-        "FunctionName": "${AddLocationFunctionArn}"
-      },
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException"
-          ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 6,
-          "BackoffRate": 2
-        }
-      ],
-      "Next": "Save Post"
-    },
-    "Save Post": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "OutputPath": "$.Payload",
-      "Parameters": {
-        "Payload.$": "$",
-        "FunctionName": "${SavePostFunctionArn}"
-      },
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException"
-          ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 6,
-          "BackoffRate": 2
-        }
-      ],
-      "End": true
     }
-  }
 }
