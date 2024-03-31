@@ -8,16 +8,21 @@ Description: "(SO9130) AI Powered Text Insights"
 Parameters:
   AthenaProjectionRangeStart:
     Type: String
-    Description: Start date of Athena Partition Projection. Only Tweets after this date appear in Athena history table.
+    Description: Start date of Athena Partition Projection. Only Posts after this date appear in Athena history table.
     Default: 2022-01-01 00:00:00
     AllowedPattern: '\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
     ConstraintDescription: Must be a valid date in the yyyy-MM-dd HH:mm:SS format
   Labels:
     Type: String
-    Default: "security,machine learning,database,storage,compute"
-  ModelName:
+    Default: 'Health and fitness, Humor, Personal growth, Philanthropy, Recreation and leisure, Family, friends, and, relationships, Career, Finance, Education and training, Time management'
+  SentimentCategories:
     Type: String
-    Default: bart
+    Default: 'Positive, Negative, Neutral'
+  ModelId:
+    Type: String
+    Default: 'claude'
+    AllowedValues:
+      - 'claude'
   Language:
     Type: String
     Description: The language that the text to be processed is in
@@ -34,57 +39,6 @@ Parameters:
     Type: String
     Description: The frequency at which the detector will look for anomalies
     Default: PT1H
-
-Mappings:
-  # Hugging Face Inference Containers
-  # https://github.com/aws/deep-learning-containers/blob/master/available_images.md
-  ContainerImageByRegion:
-    us-east-1:
-      Image: 763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    us-east-2:
-      Image: 763104351884.dkr.ecr.us-east-2.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    us-west-1:
-      Image: 763104351884.dkr.ecr.us-west-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    us-west-2:
-      Image: 763104351884.dkr.ecr.us-west-2.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    af-south-1:
-      Image: 626614931356.dkr.ecr.af-south-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    ap-east-1:
-      Image: 871362719292.dkr.ecr.ap-east-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    ap-south-1:
-      Image: 763104351884.dkr.ecr.ap-south-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    ap-northeast-3:
-      Image: 364406365360.dkr.ecr.ap-northeast-3.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    ap-northeast-2:
-      Image: 763104351884.dkr.ecr.ap-northeast-2.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    ap-southeast-1:
-      Image: 763104351884.dkr.ecr.ap-southeast-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    ap-southeast-2 :
-      Image: 763104351884.dkr.ecr.ap-southeast-2.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    ap-northeast-1:
-      Image: 763104351884.dkr.ecr.ap-northeast-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    ca-central-1:
-      Image: 763104351884.dkr.ecr.ca-central-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    eu-central-1:
-      Image: 763104351884.dkr.ecr.eu-central-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    eu-west-1:
-      Image: 763104351884.dkr.ecr.eu-west-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    eu-west-2:
-      Image: 763104351884.dkr.ecr.eu-west-2.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    eu-south-1:
-      Image: 692866216735.dkr.ecr.eu-south-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    eu-west-3:
-      Image: 763104351884.dkr.ecr.eu-west-3.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    eu-north-1:
-      Image: 763104351884.dkr.ecr.eu-north-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    me-south-1:
-      Image: 217643126080.dkr.ecr.me-south-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    sa-east-1:
-      Image: 763104351884.dkr.ecr.sa-east-1.amazonaws.com/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    cn-north-1:
-      Image: 727897471807.dkr.ecr.cn-north-1.amazonaws.com.cn/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
-    cn-northwest-1:
-      Image: 727897471807.dkr.ecr.cn-northwest-1.amazonaws.com.cn/huggingface-pytorch-inference:1.7-transformers4.6-cpu-py36-ubuntu18.04
 
 Resources:
 
@@ -141,43 +95,43 @@ Resources:
   ##############
   # SQS queues #
   ##############
-  TweetsQueue:
+  PostsQueue:
     Type: AWS::SQS::Queue
     Properties:
       KmsMasterKeyId: alias/aws/sqs
       VisibilityTimeout: 200
       RedrivePolicy:
-        deadLetterTargetArn: !GetAtt TweetsDeadLetterQueue.Arn
+        deadLetterTargetArn: !GetAtt PostsDeadLetterQueue.Arn
         maxReceiveCount: 5
-  TweetsDeadLetterQueue:
+  PostsDeadLetterQueue:
     Type: AWS::SQS::Queue
     Properties:
       KmsMasterKeyId: alias/aws/sqs
-  TweetsQueuePolicy:
+  PostsQueuePolicy:
     Type: AWS::SQS::QueuePolicy
     Properties:
       Queues:
-        - !Ref TweetsQueue
+        - !Ref PostsQueue
       PolicyDocument:
         Statement:
           - Effect: Deny
             Principal: '*'
             Action: sqs:SendMessage
-            Resource: !GetAtt TweetsQueue.Arn
+            Resource: !GetAtt PostsQueue.Arn
             Condition:
               Bool:
                 aws:SecureTransport: false
-  TweetsDeadLetterQueuePolicy:
+  PostsDeadLetterQueuePolicy:
     Type: AWS::SQS::QueuePolicy
     Properties:
       Queues:
-        - !Ref TweetsDeadLetterQueue
+        - !Ref PostsDeadLetterQueue
       PolicyDocument:
         Statement:
           - Effect: Deny
             Principal: '*'
             Action: sqs:SendMessage
-            Resource: !GetAtt TweetsDeadLetterQueue.Arn
+            Resource: !GetAtt PostsDeadLetterQueue.Arn
             Condition:
               Bool:
                 aws:SecureTransport: false
@@ -185,7 +139,7 @@ Resources:
   ##############
   # S3 buckets #
   ##############
-  TweetsBucket:
+  PostsBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
     Properties:
@@ -200,21 +154,24 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
       LoggingConfiguration:
         DestinationBucketName: !Ref LoggingBucket
-        LogFilePrefix: "tweets-bucket/"
-  TweetsBucketPolicy:
+        LogFilePrefix: "posts-bucket/"
+  PostsBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket: !Ref TweetsBucket
+      Bucket: !Ref PostsBucket
       PolicyDocument:
         Statement:
           - Effect: Deny
             Principal: "*"
             Action: "*"
             Resource:
-              - !Sub "arn:aws:s3:::${TweetsBucket}/*"
-              - !Sub "arn:aws:s3:::${TweetsBucket}"
+              - !Sub "arn:aws:s3:::${PostsBucket}/*"
+              - !Sub "arn:aws:s3:::${PostsBucket}"
             Condition:
               Bool:
                 aws:SecureTransport: false
@@ -233,6 +190,9 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
       LoggingConfiguration:
         DestinationBucketName: !Ref LoggingBucket
         LogFilePrefix: "athena-results-bucket/"
@@ -262,6 +222,9 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
       AccessControl: LogDeliveryWrite
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -303,15 +266,12 @@ Resources:
               LogGroupArn: !GetAtt ExpressLogGroup.Arn
       DefinitionUri: state_machine/process_post.asl.json
       DefinitionSubstitutions:
-        ClassifyPostFunctionArn: !GetAtt ClassifyPostsFunction.Arn
-        ComprehendInsightsFunctionArn: !GetAtt ComprehendInsightsFunction.Arn
+        ExtractInisghtsFunctionArn: !GetAtt ExtractInsightsFunction.Arn
         AddLocationFunctionArn: !GetAtt AddLocationFunction.Arn
         SavePostFunctionArn: !GetAtt SavePostFunction.Arn
       Policies:
         - LambdaInvokePolicy:
-            FunctionName: !Ref ClassifyPostsFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref ComprehendInsightsFunction
+            FunctionName: !Ref ExtractInsightsFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref AddLocationFunction
         - LambdaInvokePolicy:
@@ -328,13 +288,13 @@ Resources:
   TriggerOnSQSFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.9
+      Runtime: python3.10
       Timeout: 180
       Handler: lambda.handler
       CodeUri: lambdas/workflow_from_sqs/
       Policies:
         - SQSPollerPolicy:
-            QueueName: !GetAtt TweetsQueue.QueueName
+            QueueName: !GetAtt PostsQueue.QueueName
         - StepFunctionsExecutionPolicy:
             StateMachineName: !GetAtt ProcessPostStateMachine.Name
       Environment:
@@ -345,60 +305,34 @@ Resources:
         SQSEvent:
           Type: SQS
           Properties:
-            Queue: !GetAtt TweetsQueue.Arn
+            Queue: !GetAtt PostsQueue.Arn
             BatchSize: 3
             FunctionResponseTypes:
               - ReportBatchItemFailures
 
   ########################################################
-  # Function to classify (using HuggingFace model) posts #
+  # Function to process the post                         #
   ########################################################
-  ClassifyPostsFunction:
+  ExtractInsightsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.9
+      Runtime: python3.10
       Timeout: 180
       Handler: lambda.handler
-      CodeUri: lambdas/classify_post/
+      CodeUri: lambdas/process_post/
       Policies:
         - Version: 2012-10-17
           Statement:
             - Effect: Allow
-              Action: "sagemaker:InvokeEndpoint"
-              Resource: !Ref SageMakerEndpoint
-      Environment:
-        Variables:
-          ENDPOINT_NAME: !GetAtt SageMakerEndpoint.EndpointName
-          LABELS: !Ref Labels
-          LOG_LEVEL: info
-          MIN_CLASS_SCORE: 0.40
-          DEFAULT_LABEL: other
-
-  #############################################
-  # Function to apply comprehend to the posts #
-  #############################################
-  ComprehendInsightsFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Runtime: python3.9
-      Timeout: 180
-      Handler: lambda.handler
-      CodeUri: lambdas/comprehend_post/
-      Policies:
-        - Version: 2012-10-17
-          Statement:
-            - Effect: Allow
-              Action:
-                - comprehend:DetectEntities
-                - comprehend:DetectSentiment
-                - comprehend:DetectKeyPhrases
+              Action: "bedrock:InvokeModel"
               Resource: "*"
       Environment:
         Variables:
-          LANGUAGE: !Ref Language
-          MIN_ENTITY_LOCATION_SCORE: 0.40
-          MIN_KEY_PHRASE_SCORE: 0.40
+          MODEL_ID: !Ref ModelId
+          LABELS: !Ref Labels
           LOG_LEVEL: info
+          LANGUAGE_CODE: !Ref Language
+          SENTIMENT_LABELS: !Ref SentimentCategories
 
   ################################################
   # Function to obtain coordinates from the post #
@@ -406,7 +340,7 @@ Resources:
   AddLocationFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.9
+      Runtime: python3.10
       Timeout: 180
       Handler: lambda.handler
       CodeUri: lambdas/locate_post/
@@ -430,16 +364,16 @@ Resources:
   SavePostFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.9
+      Runtime: python3.10
       Timeout: 180
       Handler: lambda.handler
       CodeUri: lambdas/save_post/
       Policies:
       - S3WritePolicy:
-          BucketName: !Ref TweetsBucket
+          BucketName: !Ref PostsBucket
       Environment:
         Variables:
-          TWEETS_BUCKET: !Ref TweetsBucket
+          POSTS_BUCKET: !Ref PostsBucket
           LOG_LEVEL: info
 
   ########################################################################
@@ -448,7 +382,7 @@ Resources:
   CreateL4MDetectorFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.9
+      Runtime: python3.10
       Timeout: 180
       Handler: lambda.handler
       CodeUri: lambdas/custom_resources/lookout4metrics/
@@ -484,7 +418,7 @@ Resources:
       - AlertTopic
       - AthenaWorkGroup
       - GlueDatabase
-      - GlueTweetsTable
+      - GlueTopicsTable
     Properties:
       ServiceToken: !GetAtt CreateL4MDetectorFunction.Arn
       Target:
@@ -494,53 +428,11 @@ Resources:
         AlertThreshold: !Ref AnomalyAlertThreshold
         AthenaWorkgroupName: !Ref AthenaWorkGroup
         GlueDbName: !Ref GlueDatabase
-        GlueTableName: !Ref GlueTweetsTable
+        GlueTableName: !Ref GlueTopicsTable
         AwsDataCatalog: AwsDataCatalog
         DetectorFrequency: !Ref AnomalyDetectionFrequency
       Body: |
 
-  ###################
-  # NLP Model setup #
-  ###################
-  SageMakerModelRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - sagemaker.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
-  SageMakerModel:
-    Type: AWS::SageMaker::Model
-    Properties:
-      ExecutionRoleArn: !GetAtt SageMakerModelRole.Arn
-      PrimaryContainer:
-        Image: !FindInMap [ContainerImageByRegion, !Ref 'AWS::Region', Image]
-        Environment:
-          HF_MODEL_ID: facebook/bart-large-mnli
-          HF_TASK: zero-shot-classification
-          SAGEMAKER_CONTAINER_LOG_LEVEL: 20
-          SAGEMAKER_REGION: !Ref 'AWS::Region'
-  SageMakerEndpoint:
-    Type: AWS::SageMaker::Endpoint
-    Properties:
-      EndpointConfigName: !GetAtt SageMakerEndpointConfig.EndpointConfigName
-  SageMakerEndpointConfig:
-    Type: AWS::SageMaker::EndpointConfig
-    Properties:
-      ProductionVariants:
-        - ModelName: !GetAtt SageMakerModel.ModelName
-          VariantName: !GetAtt SageMakerModel.ModelName
-          InitialVariantWeight: 1.0
-          ServerlessConfig:
-            MaxConcurrency: 10
-            MemorySizeInMB: 6144
 
   ################
   # Athena setup #
@@ -548,7 +440,7 @@ Resources:
   AthenaWorkGroup:
     Type: AWS::Athena::WorkGroup
     Properties:
-      Name: !Sub "${AWS::StackName}-TweetsWorkGroup"
+      Name: !Sub "${AWS::StackName}-PostsWorkGroup"
       WorkGroupConfiguration:
         EnforceWorkGroupConfiguration: false
         ResultConfiguration:
@@ -561,14 +453,14 @@ Resources:
     Properties:
       CatalogId: !Ref "AWS::AccountId"
       DatabaseInput:
-        Name: !Sub "${AWS::StackName}_tweets"
-  GlueTweetsTable:
+        Name: !Sub "${AWS::StackName}_db"
+  GluePostsTable:
     Type: AWS::Glue::Table
     Properties:
       CatalogId: !Ref "AWS::AccountId"
       DatabaseName: !Ref GlueDatabase
       TableInput:
-        Name: tweets
+        Name: posts
         PartitionKeys:
           - Name: partition_timestamp
             Type: timestamp
@@ -580,12 +472,8 @@ Resources:
               Type: float
             - Name: location
               Type: string
-            - Name: category_type
+            - Name: topic
               Type: string
-            - Name: category_type_model_result
-              Type: string
-            - Name: category_type_score
-              Type: double
             - Name: sentiment
               Type: string
             - Name: created_at
@@ -609,7 +497,7 @@ Resources:
             - Name: platform
               Type: string
           Compressed: False
-          Location: !Sub "s3://${TweetsBucket}/tweets"
+          Location: !Sub "s3://${PostsBucket}/posts"
           InputFormat: org.apache.hadoop.mapred.TextInputFormat
           OutputFormat: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
           SerdeInfo:
@@ -621,7 +509,7 @@ Resources:
           "projection.partition_timestamp.range": !Sub "${AthenaProjectionRangeStart},NOW+1DAY"
           "projection.partition_timestamp.interval": "15"
           "projection.partition_timestamp.interval.unit": "MINUTES"
-          "storage.location.template": !Sub "s3://${TweetsBucket}/tweets/${!partition_timestamp}/"
+          "storage.location.template": !Sub "s3://${PostsBucket}/posts/${!partition_timestamp}/"
         TableType: EXTERNAL_TABLE
   GluePhrasesTable:
     Type: AWS::Glue::Table
@@ -650,7 +538,7 @@ Resources:
             - Name: count
               Type: tinyint
           Compressed: False
-          Location: !Sub "s3://${TweetsBucket}/phrases"
+          Location: !Sub "s3://${PostsBucket}/phrases"
           InputFormat: org.apache.hadoop.mapred.TextInputFormat
           OutputFormat: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
           SerdeInfo:
@@ -662,7 +550,97 @@ Resources:
           "projection.partition_timestamp.range": !Sub "${AthenaProjectionRangeStart},NOW+1DAY"
           "projection.partition_timestamp.interval": "1"
           "projection.partition_timestamp.interval.unit": "DAYS"
-          "storage.location.template": !Sub "s3://${TweetsBucket}/phrases/${!partition_timestamp}/"
+          "storage.location.template": !Sub "s3://${PostsBucket}/phrases/${!partition_timestamp}/"
+        TableType: EXTERNAL_TABLE
+  GlueTopicsTable:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref "AWS::AccountId"
+      DatabaseName: !Ref GlueDatabase
+      TableInput:
+        Name: topics
+        PartitionKeys:
+          - Name: partition_timestamp
+            Type: timestamp
+        StorageDescriptor:
+          Columns:
+            - Name: created_at
+              Type: timestamp
+            - Name: timestamp
+              Type: timestamp
+            - Name: text_clean
+              Type: string
+            - Name: user
+              Type: string
+            - Name: platform
+              Type: string
+            - Name: topic
+              Type: string
+            - Name: sentiment
+              Type: string
+            - Name: longitude
+              Type: float
+            - Name: latitude
+              Type: float
+            - Name: location
+              Type: string
+            - Name: count
+              Type: tinyint
+          Compressed: False
+          Location: !Sub "s3://${PostsBucket}/topics"
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hive.hcatalog.data.JsonSerDe
+        Parameters:
+          "projection.enabled": "true"
+          "projection.partition_timestamp.type": "date"
+          "projection.partition_timestamp.format": "yyyy-MM-dd HH:mm:SS"
+          "projection.partition_timestamp.range": !Sub "${AthenaProjectionRangeStart},NOW+1DAY"
+          "projection.partition_timestamp.interval": "1"
+          "projection.partition_timestamp.interval.unit": "DAYS"
+          "storage.location.template": !Sub "s3://${PostsBucket}/topics/${!partition_timestamp}/"
+        TableType: EXTERNAL_TABLE
+  GlueLinksTable:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref "AWS::AccountId"
+      DatabaseName: !Ref GlueDatabase
+      TableInput:
+        Name: links
+        PartitionKeys:
+          - Name: partition_timestamp
+            Type: timestamp
+        StorageDescriptor:
+          Columns:
+            - Name: created_at
+              Type: timestamp
+            - Name: timestamp
+              Type: timestamp
+            - Name: text_clean
+              Type: string
+            - Name: user
+              Type: string
+            - Name: platform
+              Type: string
+            - Name: link
+              Type: string
+            - Name: count
+              Type: tinyint
+          Compressed: False
+          Location: !Sub "s3://${PostsBucket}/links"
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hive.hcatalog.data.JsonSerDe
+        Parameters:
+          "projection.enabled": "true"
+          "projection.partition_timestamp.type": "date"
+          "projection.partition_timestamp.format": "yyyy-MM-dd HH:mm:SS"
+          "projection.partition_timestamp.range": !Sub "${AthenaProjectionRangeStart},NOW+1DAY"
+          "projection.partition_timestamp.interval": "1"
+          "projection.partition_timestamp.interval.unit": "DAYS"
+          "storage.location.template": !Sub "s3://${PostsBucket}/links/${!partition_timestamp}/"
         TableType: EXTERNAL_TABLE
 
   #########################################
@@ -685,7 +663,6 @@ Resources:
               - Action:
                   - 'glue:GetCatalogImportStatus'
                   - 'glue:GetDatabase'
-                  - 'glue:GetPartitions'
                   - 'glue:GetTable'
                 Effect: Allow
                 Resource:
@@ -704,8 +681,8 @@ Resources:
                 Resource:
                   - !Sub "arn:${AWS::Partition}:s3:::${AthenaResultsBucket}"
                   - !Sub "arn:${AWS::Partition}:s3:::${AthenaResultsBucket}/*"
-                  - !Sub "arn:${AWS::Partition}:s3:::${TweetsBucket}"
-                  - !Sub "arn:${AWS::Partition}:s3:::${TweetsBucket}/*"
+                  - !Sub "arn:${AWS::Partition}:s3:::${PostsBucket}"
+                  - !Sub "arn:${AWS::Partition}:s3:::${PostsBucket}/*"
               - Action:
                   - 'athena:CreatePreparedStatement' # On WG
                   - 'athena:DeletePreparedStatement' # On WG
@@ -768,16 +745,14 @@ Resources:
 Outputs:
   AwsRegion:
     Value: !Ref 'AWS::Region'
-  TweetsQueueUrl:
-    Value: !Ref TweetsQueue
-  TweetsQueueArn:
-    Value: !GetAtt TweetsQueue.Arn
+  PostsQueueUrl:
+    Value: !Ref PostsQueue
+  PostsQueueArn:
+    Value: !GetAtt PostsQueue.Arn
   AlertTopicArn:
     Value: !Ref AlertTopic
-  SageMakerEndpointName:
-    Value: !GetAtt SageMakerEndpoint.EndpointName
-  TweetsBucketName:
-    Value: !Ref TweetsBucket
+  PostsBucketName:
+    Value: !Ref PostsBucket
   PlaceIndexName:
     Value: !Ref PlaceIndex
   AthenaAccessRoleARN:
