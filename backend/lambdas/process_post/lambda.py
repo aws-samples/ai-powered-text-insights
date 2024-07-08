@@ -8,13 +8,10 @@ import boto3
 import demoji
 import re
 
-from langchain.prompts import PromptTemplate
-from langchain.llms.bedrock import Bedrock
 from langchain_community.chat_models import BedrockChat
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
-from text_preprocessing import TweetPreprocessor
 from llm_prompts_by_lang import prompts_map, examples_map, json_format_str
 
 model_id = os.environ['MODEL_ID']
