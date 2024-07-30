@@ -20,9 +20,10 @@ Parameters:
     Default: 'Positive, Negative, Neutral'
   ModelId:
     Type: String
-    Default: 'claude'
+    Default: 'anthropic.claude-3-sonnet-20240229-v1:0'
     AllowedValues:
-      - 'claude'
+      - 'anthropic.claude-3-haiku-20240307-v1:0'
+      - 'anthropic.claude-3-sonnet-20240229-v1:0'
   Language:
     Type: String
     Description: The language that the text to be processed is in
@@ -288,7 +289,7 @@ Resources:
   TriggerOnSQSFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.10
+      Runtime: python3.12
       Timeout: 180
       Handler: lambda.handler
       CodeUri: lambdas/workflow_from_sqs/
@@ -316,7 +317,7 @@ Resources:
   ExtractInsightsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.10
+      Runtime: python3.12
       Timeout: 180
       Handler: lambda.handler
       CodeUri: lambdas/process_post/
@@ -340,7 +341,7 @@ Resources:
   AddLocationFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.10
+      Runtime: python3.12
       Timeout: 180
       Handler: lambda.handler
       CodeUri: lambdas/locate_post/
@@ -364,7 +365,7 @@ Resources:
   SavePostFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.10
+      Runtime: python3.12
       Timeout: 180
       Handler: lambda.handler
       CodeUri: lambdas/save_post/
@@ -382,7 +383,7 @@ Resources:
   CreateL4MDetectorFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: python3.10
+      Runtime: python3.12
       Timeout: 180
       Handler: lambda.handler
       CodeUri: lambdas/custom_resources/lookout4metrics/
