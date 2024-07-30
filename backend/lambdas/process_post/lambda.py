@@ -1,214 +1,193 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
 
-import json
-import logging
 import os
-import boto3
+import traceback
+
 import demoji
-import re
 
-from langchain_community.chat_models import BedrockChat
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+import boto3
+import langchain_core
+from langchain_aws import ChatBedrock
 
-from llm_prompts_by_lang import prompts_map, examples_map, json_format_str
+from output_models.models import ExtractedInformation, TopicMatch
+from prompt_selector import get_information_extraction_prompt_selector, get_topic_match_prompt_selector
 
-model_id = os.environ['MODEL_ID']
-language_code = os.environ['LANGUAGE_CODE']
-meta_topics = os.environ['LABELS'].split(',')
-meta_sentiments = os.environ['SENTIMENT_LABELS'].split(',')
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools import Logger
 
-meta_sentiments = [sentiment.strip() for sentiment in meta_sentiments if sentiment.strip() != '']
-meta_topics = [topic.strip() for topic in meta_topics if topic.strip() != '']
+MODEL_ID = os.environ['MODEL_ID']
+AWS_REGION = os.environ['AWS_REGION']
+LANGUAGE_CODE = os.environ['LANGUAGE_CODE']
+META_TOPICS_STR = os.environ['LABELS']
+META_SENTIMENTS_STR = os.environ['SENTIMENT_LABELS']
+
+INFORMATION_EXTRACTION_PROMPT_SELECTOR = get_information_extraction_prompt_selector(LANGUAGE_CODE)
+TOPIC_MATCH_PROMPT_SELECTOR = get_topic_match_prompt_selector(LANGUAGE_CODE)
+
+TOPIC_MATCH_MODEL_PARAMETERS = {
+    "max_tokens": 500,
+    "temperature": 0.1,
+    "top_k": 20,
+}
+
+INFORMATION_EXTRACTION_MODEL_PARAMETERS = {
+    "max_tokens": 1500,
+    "temperature": 0.1,
+    "top_k": 20,
+}
 
 bedrock_runtime = boto3.client(
     service_name="bedrock-runtime",
-    region_name="us-east-1"
+    region_name=AWS_REGION
 )
 
-model_id_mapping = {
-    'claude': 'anthropic.claude-3-haiku-20240307-v1:0',
-}
+logger = Logger()
 
-logging.getLogger().setLevel(os.environ.get('LOG_LEVEL', 'WARNING').upper())
+langchain_core.globals.set_debug(True)
 
-# Given two sets of text, extract the elements that are common to both lists
-def extract_common_elements(list1, list2):
-    return list(set(list1) & set(list2))
+def unknown_to_empty_text_values(extracted_info: ExtractedInformation):
 
-def text_information_extraction(post):
+    extracted_info.topic = extracted_info.topic.strip()
+    extracted_info.location = extracted_info.location.strip()
+    extracted_info.sentiment = extracted_info.sentiment.strip()
 
-    model_kwargs_mapping_data = {
-        "claude": {
-            "max_tokens": 300,
-            "temperature": 0.1,
-            "top_p": 0.9,
-            "stop_sequences": ["</json>"]
-        },
-    }
+    extracted_info.topic = extracted_info.topic if extracted_info.topic != "<UNKNOWN>" else ""
+    extracted_info.location = extracted_info.location if extracted_info.location != "<UNKNOWN>" else ""
+    extracted_info.sentiment = extracted_info.sentiment if extracted_info.sentiment != "<UNKNOWN>" else ""
 
-    examples = "".join(
-        f"\n\nPOST:\n\n{re.sub(' +', ' ', example[0])}\n\nJSON:{re.sub(' +', ' ', example[1])}" for example in
-        examples_map[model_id][language_code]['info_extraction_examples'])
-    logging.info(f'Examples:')
-    logging.info(examples)
 
-    if model_id == 'claude':
+def text_topic_match(
+        meta_topics: str,
+        text: str,
+) -> TopicMatch:
 
-        llm_data = BedrockChat(
-            model_id=model_id_mapping[model_id],
-            model_kwargs=model_kwargs_mapping_data[model_id],
-            client=bedrock_runtime,
+    bedrock_llm = ChatBedrock(
+        model_id=MODEL_ID,
+        model_kwargs=TOPIC_MATCH_MODEL_PARAMETERS,
+        client=bedrock_runtime,
+    )
+
+    claude_topic_match_prompt_template = TOPIC_MATCH_PROMPT_SELECTOR.get_prompt(MODEL_ID)
+
+    print(claude_topic_match_prompt_template.format(meta_topics=meta_topics, text=text))
+
+    structured_llm = bedrock_llm.with_structured_output(TopicMatch)
+
+    structured_topic_match_chain = claude_topic_match_prompt_template | structured_llm
+
+    topic_match_obj = structured_topic_match_chain.invoke({"meta_topics": meta_topics, "text": text})
+
+    print("Topic match object")
+    print(type(topic_match_obj))
+    print(topic_match_obj)
+
+    return topic_match_obj
+
+def text_information_extraction(
+        sentiments: str,
+        text: str
+) -> ExtractedInformation:
+
+    bedrock_llm = ChatBedrock(
+        model_id=MODEL_ID,
+        model_kwargs=INFORMATION_EXTRACTION_MODEL_PARAMETERS,
+        client=bedrock_runtime,
+    )
+
+    claude_information_extraction_prompt_template = INFORMATION_EXTRACTION_PROMPT_SELECTOR.get_prompt(MODEL_ID)
+
+    print("The prompt template")
+    print(claude_information_extraction_prompt_template)
+
+    print(claude_information_extraction_prompt_template.format(
+        text=text,
+        sentiments=sentiments
         )
+    )
 
-    else:
-        raise Exception("Model id not supported")
+    structured_llm = bedrock_llm.with_structured_output(ExtractedInformation)
 
-    #Prompt for extracting data
+    structured_chain = claude_information_extraction_prompt_template | structured_llm
 
-    messages_data = [
-        ("human", prompts_map[model_id][language_code]['info_extraction']),
-    ]
+    information_extraction_obj = structured_chain.invoke({
+        "text": text,
+        "sentiments": sentiments
+    })
 
-    extract_data_prompt = ChatPromptTemplate.from_messages(messages_data)
+    print("Information extraction object")
+    print(type(information_extraction_obj))
+    print(information_extraction_obj)
 
-    chain_extract_data = extract_data_prompt | llm_data | StrOutputParser()
+    return information_extraction_obj
 
-    #Modify JSON format to consider only sentiments specified
-    json_format = json.loads(json_format_str['info_extraction'])
-    json_format['properties']['sentiment']['accepted_values'] = meta_sentiments
-    augmented_json_format_str = json.dumps(json_format)
-
-    logging.info(f'Extract data prompt')
-    logging.info(extract_data_prompt.format(json_format=augmented_json_format_str,
-                                                       examples=examples,
-                                                       post=post))
-
-    #Extract insights from text using LLM
-    text_insights_str = chain_extract_data.invoke({"examples": examples, "json_format": augmented_json_format_str, "post": post})
-
-    logging.info("Extracted data")
-    logging.info(text_insights_str)
-
-    text_insights = json.loads(text_insights_str)
-    logging.info(f'Text insights:')
-    logging.info(text_insights)
-
-    # If the JSON object is empty return None
-    if len(text_insights_str) == 0:
-        return None
-    else:
-        return text_insights
-
-def extract_topics(post):
-
-    model_kwargs_mapping_topic = {
-        "claude": {
-            "max_tokens": 300,
-            "temperature": 0.1,
-            "top_p": 0.9,
-            "stop_sequences": []
-        },
-    }
-
-    if model_id == 'claude':
-
-        llm_topic = BedrockChat(
-            model_id=model_id_mapping[model_id],
-            model_kwargs=model_kwargs_mapping_topic[model_id],
-            client=bedrock_runtime,
-        )
-
-    else:
-        raise Exception("Model id not supported")
-
-    #Prompt for topic match
-
-    messages_data = [
-        ("human", prompts_map[model_id][language_code]['topic_match']),
-    ]
-
-    topic_match_prompt = ChatPromptTemplate.from_messages(messages_data)
-
-    chain_topic_match = topic_match_prompt | llm_topic | StrOutputParser()
-
-    #Get meta-category from topic
-    meta_topics_str = ','.join(meta_topics)
-    topic_match_str = chain_topic_match.invoke({"json_format": json_format_str['topic_match'], "meta_topics": meta_topics_str, "text": post})
-
-    logging.info(f'Topic match prompt')
-    logging.info(topic_match_prompt.format(json_format=json_format_str['topic_match'],
-                                                       meta_topics=meta_topics_str,
-                                                       text=post))
-
-    logging.info("Matched topic")
-    logging.info(topic_match_str)
-
-    #Post process answer
-    topic_match_str = topic_match_str.replace('\n', ' ').replace('\r', '').strip()
-    regex_match = re.search("^<json>(.*)</json>$", topic_match_str)
-
-    if regex_match:
-        topic_match_str = regex_match.group(1)
-
-        post_match = json.loads(topic_match_str)
-
-        logging.info(f'Topic match:')
-        logging.info(post_match)
-
-        return post_match
-    else:
-        return {
-            "topic_match":False,
-            "related_topics": []
-        }
-
-
-def handler(event, context):
+@logger.inject_lambda_context(log_event=True)
+def handler(event, _context: LambdaContext):
 
         item = event
 
-        logging.info('Item:')
-        logging.info(item)
+        logger.info('Item:')
+        logger.info(item)
 
         #Attemp to categorize item
         text = item['text']
-        logging.info(f'Text: {text}')
+        logger.info(f'Text: {text}')
 
         text = demoji.replace(text, "")
         item['text_clean'] = text
 
-        topic_match = extract_topics(item['text_clean'])
+        try:
 
-        if topic_match['topic_match'] == True:
+            #meta_topics_str = ','.join(META_TOPICS)
+            topic_match = text_topic_match(META_TOPICS_STR, item['text_clean'])
 
-            text_insight = text_information_extraction(item['text_clean'])
-            logging.info(f'Text insights:')
-            logging.info(text_insight)
+            if topic_match.is_match == True and len(topic_match.related_topics) > 0:
 
-            if text_insight is not None:
-                item['process_post'] = True
-                item.update(text_insight)
-                item["meta_topics"] = topic_match["related_topics"]
+                try:
 
-                # Process location only if there is one
-                if len(item['location']) > 0:
-                    item['process_location'] = True
-                else:
-                    item['process_location'] = False
+                    text_insight = text_information_extraction(META_SENTIMENTS_STR, item['text_clean'])
+                    logger.info(f'Text insights:')
+                    logger.info(text_insight)
 
-                item['model'] = model_id
+                    if text_insight is not None:
+                        item['process_post'] = True
+                        logger.info("Removing <UNKNOWN> values")
+                        logger.info(text_insight)
+                        unknown_to_empty_text_values(text_insight)
+                        logger.info("<UNKNOWN> removed")
+                        logger.info(text_insight)
+                        item.update(text_insight)
+                        item["meta_topics"] = topic_match.related_topics
 
-                logging.info(f'Invoking next function')
-                logging.info(item)
+                        # Process location only if there is one
+                        if len(item['location']) > 0:
+                            item['process_location'] = True
+                        else:
+                            item['process_location'] = False
+
+                        item['model'] = MODEL_ID
+
+                        logger.info(f'Invoking next function')
+                        logger.info(item)
+                    else:
+                        item['process_post'] = False
+                        logger.info(f'Nothing else to do')
+                        logger.info(item)
+
+                    return item
+
+                except Exception as e:
+
+                    print(traceback.format_exc())
+
+                    raise Exception("Unable to extract data on text")
+
             else:
-                item['process_post'] = False
-                logging.info(f'Nothing else to do')
-                logging.info(item)
+                logger.info(f'Topic not matched')
+                return {'process_post': False}
 
-            return item
+        except Exception as e:
 
-        else:
-            logging.info(f'Topic not matched')
-            return {'process_post': False}
+            print(traceback.format_exc())
+
+            raise Exception("Unable to match topics on text")
