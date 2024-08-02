@@ -16,7 +16,7 @@ def create_detector(project_name, frequency):
     response_create = ''
 
     response_create = L4M.create_anomaly_detector(
-        AnomalyDetectorName=project_name + "-detector-" + str(uuid.uuid1()),
+        AnomalyDetectorName=project_name + "-detector-" + str(uuid.uuid1())[:6],
         AnomalyDetectorDescription="Text insights anomaly detector",
         AnomalyDetectorConfig={
             "AnomalyDetectorFrequency": frequency,
@@ -39,7 +39,7 @@ def define_dataset(detector_arn, project_name, frequency, athena_role_arn, athen
             }
         ],
 
-        "DimensionList": ["platform", "category_type", "sentiment"],
+        "DimensionList": ["platform", "topic", "sentiment"],
         "Offset": 60,
 
         "TimestampColumn": {
@@ -85,7 +85,7 @@ def create(event, context):
         topic_arn = target['SnsTopicArn']
         alert_threshold = target['AlertThreshold']
 
-        project = 'ai-powered-text-insights'
+        project = 'ai-text-insights'
         frequency = target['DetectorFrequency']
 
         l4m_detector = create_detector(project, frequency)
@@ -95,7 +95,6 @@ def create(event, context):
 
         L4M.create_metric_set(**dataset)
 
-        """
         L4M.activate_anomaly_detector(AnomalyDetectorArn=anomaly_detector_arn)
 
         L4M.create_alert(
@@ -110,7 +109,6 @@ def create(event, context):
             AnomalyDetectorArn=anomaly_detector_arn,
             AlertSensitivityThreshold=int(alert_threshold)
         )
-        """
 
         cfnresponse.send(event, context, cfnresponse.SUCCESS, {'Data': 'Created L4M resource'}, anomaly_detector_arn)
 
