@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
-
+import copy
 import os
 import traceback
 
@@ -10,7 +10,7 @@ import boto3
 import langchain_core
 from langchain_aws import ChatBedrock
 
-from output_models.models import ExtractedInformation, TopicMatch
+from output_models.models import ExtractedInformation, TopicMatch, TextWithInsights
 from prompt_selector import get_information_extraction_prompt_selector, get_topic_match_prompt_selector
 
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -46,16 +46,19 @@ logger = Logger()
 
 langchain_core.globals.set_debug(True)
 
-def unknown_to_empty_text_values(extracted_info: ExtractedInformation):
+def remove_unknown_values(extracted_info: ExtractedInformation):
 
-    extracted_info.topic = extracted_info.topic.strip()
-    extracted_info.location = extracted_info.location.strip()
-    extracted_info.sentiment = extracted_info.sentiment.strip()
+    text_insights = copy.deepcopy(extracted_info)
 
-    extracted_info.topic = extracted_info.topic if extracted_info.topic != "<UNKNOWN>" else ""
-    extracted_info.location = extracted_info.location if extracted_info.location != "<UNKNOWN>" else ""
-    extracted_info.sentiment = extracted_info.sentiment if extracted_info.sentiment != "<UNKNOWN>" else ""
+    topic = extracted_info.topic.strip()
+    location = extracted_info.location.strip()
+    sentiment = extracted_info.sentiment.strip()
 
+    text_insights.topic = topic if topic != "<UNKNOWN>" else ""
+    text_insights.location = location if location != "<UNKNOWN>" else ""
+    text_insights.sentiment = sentiment if sentiment != "<UNKNOWN>" else ""
+
+    return text_insights
 
 def text_topic_match(
         meta_topics: str,
@@ -70,17 +73,11 @@ def text_topic_match(
 
     claude_topic_match_prompt_template = TOPIC_MATCH_PROMPT_SELECTOR.get_prompt(MODEL_ID)
 
-    print(claude_topic_match_prompt_template.format(meta_topics=meta_topics, text=text))
-
     structured_llm = bedrock_llm.with_structured_output(TopicMatch)
 
     structured_topic_match_chain = claude_topic_match_prompt_template | structured_llm
 
     topic_match_obj = structured_topic_match_chain.invoke({"meta_topics": meta_topics, "text": text})
-
-    print("Topic match object")
-    print(type(topic_match_obj))
-    print(topic_match_obj)
 
     return topic_match_obj
 
@@ -97,15 +94,6 @@ def text_information_extraction(
 
     claude_information_extraction_prompt_template = INFORMATION_EXTRACTION_PROMPT_SELECTOR.get_prompt(MODEL_ID)
 
-    print("The prompt template")
-    print(claude_information_extraction_prompt_template)
-
-    print(claude_information_extraction_prompt_template.format(
-        text=text,
-        sentiments=sentiments
-        )
-    )
-
     structured_llm = bedrock_llm.with_structured_output(ExtractedInformation)
 
     structured_chain = claude_information_extraction_prompt_template | structured_llm
@@ -115,72 +103,86 @@ def text_information_extraction(
         "sentiments": sentiments
     })
 
-    print("Information extraction object")
-    print(type(information_extraction_obj))
-    print(information_extraction_obj)
-
     return information_extraction_obj
 
 @logger.inject_lambda_context(log_event=True)
 def handler(event, _context: LambdaContext):
 
         item = event
-
-        logger.info('Item:')
-        logger.info(item)
-
-        #Attemp to categorize item
         text = item['text']
-        logger.info(f'Text: {text}')
 
-        text = demoji.replace(text, "")
-        item['text_clean'] = text
+        clean_text = demoji.replace(text, "")
 
+        # Attemp to extract information from text
         try:
 
-            #meta_topics_str = ','.join(META_TOPICS)
-            topic_match = text_topic_match(META_TOPICS_STR, item['text_clean'])
+            topic_match = text_topic_match(META_TOPICS_STR, clean_text)
 
-            if topic_match.is_match == True and len(topic_match.related_topics) > 0:
+            if topic_match.is_match and len(topic_match.related_topics) > 0:
 
                 try:
 
-                    text_insight = text_information_extraction(META_SENTIMENTS_STR, item['text_clean'])
+                    insights = text_information_extraction(META_SENTIMENTS_STR, clean_text)
                     logger.info(f'Text insights:')
-                    logger.info(text_insight)
+                    logger.info(insights)
 
-                    if text_insight is not None:
-                        item['process_post'] = True
+                    if insights is not None:
+
                         logger.info("Removing <UNKNOWN> values")
-                        logger.info(text_insight)
-                        unknown_to_empty_text_values(text_insight)
+                        logger.debug(insights)
+
+                        insights = remove_unknown_values(insights)
+
                         logger.info("<UNKNOWN> removed")
-                        logger.info(text_insight)
-                        item.update(text_insight)
-                        item["meta_topics"] = topic_match.related_topics
+                        logger.debug(insights)
 
-                        # Process location only if there is one
-                        if len(item['location']) > 0:
-                            item['process_location'] = True
-                        else:
-                            item['process_location'] = False
-
-                        item['model'] = MODEL_ID
+                        # Create output object
+                        text_insights = TextWithInsights(
+                            text=item["text"],
+                            user=item["user"],
+                            created_at=item["created_at"],
+                            source=item["source"],
+                            platform=item["platform"],
+                            text_clean=clean_text,
+                            meta_topics=topic_match.related_topics,
+                            topic=insights.topic,
+                            location=insights.location,
+                            entities=insights.entities,
+                            keyphrases=insights.keyphrases,
+                            sentiment=insights.sentiment,
+                            links=insights.links,
+                            model_id=MODEL_ID,
+                            process_post=True,
+                            process_location=True if len(insights.location) > 0 else False # Process location only if there is one
+                        )
 
                         logger.info(f'Invoking next function')
-                        logger.info(item)
+                        logger.debug(item)
                     else:
-                        item['process_post'] = False
-                        logger.info(f'Nothing else to do')
-                        logger.info(item)
 
-                    return item
+                        # Create output object
+                        text_insights = TextWithInsights(
+                            text=item["text"],
+                            user=item["user"],
+                            created_at=item["created_at"],
+                            source=item["source"],
+                            platform=item["platform"],
+                            text_clean=clean_text,
+                            model_id=MODEL_ID,
+                            process_post=False
+                        )
+
+                        logger.info(f'Could not extract information from this text')
+                        logger.debug(item)
+
+                    return text_insights.dict()
 
                 except Exception as e:
 
-                    print(traceback.format_exc())
+                    logger.error("Unable to extract data from text")
+                    logger.error(traceback.format_exc())
 
-                    raise Exception("Unable to extract data on text")
+                    raise Exception("Unable to extract data from text")
 
             else:
                 logger.info(f'Topic not matched')
@@ -188,6 +190,6 @@ def handler(event, _context: LambdaContext):
 
         except Exception as e:
 
-            print(traceback.format_exc())
+            logger.error(traceback.format_exc())
 
             raise Exception("Unable to match topics on text")

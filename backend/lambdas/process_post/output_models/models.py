@@ -18,3 +18,17 @@ class TopicMatch(BaseModel):
     understanding: str = Field(description="In your own words the topics to which this text is related")
     related_topics: List[str] = Field(description="The list of topics into which the input text can be classified")
     is_match: bool = Field(description="true if the text matches one of your topics of interest, false otherwise")
+
+
+class TextWithInsights(ExtractedInformation):
+    """A text with its extracted insights"""
+    text: str = Field(description="The original text as written by the user")
+    user: str = Field(description="The user that wrote the text")
+    created_at: str = Field(description="The datetime when te text was created")
+    source: str = Field(description="The source platform from where this text was generated")
+    platform: str = Field(description="The platform from where this text was generated")
+    text_clean: str = Field(description="The original text after being pre-processed")
+    process_post: bool = Field(description="Whether the text should be further processed or not")
+    meta_topics: List[str] = Field([], description="A list of topics in which the text can be classified"),
+    process_location: bool = Field(False, description="Whether the text has a location that should be further processed"),
+    model_id: str = Field(description="The model id that was used to extract these insights")

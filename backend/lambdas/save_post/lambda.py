@@ -83,12 +83,12 @@ def handler(event, context):
     if item['process_location']:
         post = {'text': item['text'], 'user': item['user'], 'created_at': item['created_at'], 'source': item['source'],
                 'platform': item['platform'], 'text_clean': item['text_clean'], 'topic': item['topic'].lower().strip(),
-                'model': item['model'], 'sentiment': item['sentiment'].lower().strip(), 'location': item['location'],
+                'model': item['model_id'], 'sentiment': item['sentiment'].lower().strip(), 'location': item['location'],
                 'longitude': item['longitude'], 'latitude': item['latitude'], 'timestamp': item['timestamp'], 'count': item['count']}
     else:
         post = {'text': item['text'], 'user': item['user'], 'created_at': item['created_at'], 'source': item['source'],
                 'platform': item['platform'], 'text_clean': item['text_clean'], 'topic': item['topic'].lower().strip(),
-                'model': item['model'], 'sentiment': item['sentiment'].lower().strip(), 'timestamp': item['timestamp'],
+                'model': item['model_id'], 'sentiment': item['sentiment'].lower().strip(), 'timestamp': item['timestamp'],
                 'count': item['count']}
 
     s3.put_object(
